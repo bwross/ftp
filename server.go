@@ -23,7 +23,8 @@ type Listener interface {
 
 // A Server serves incoming connections.
 type Server struct {
-	Addr     string   // Addr to bind to.
+	Addr     string   // Addr to bind the control channel to.
+	Host     string   // Host to bind passive data connections to.
 	Dialer   Dialer   // Dialer for active connections.
 	Listener Listener // Listener for passive connections.
 	Handler  Handler  // Handler for commands.
