@@ -120,27 +120,26 @@ func (s *Session) Passive(nw string) error {
 		s.Data.Close()
 		s.Data = nil
 	}
-	li, err := s.Server.listen(nw, s.passiveAddr())
+	li, err := s.Server.listen(nw, s.passiveHost()+":0")
 	if err != nil {
 		return err
-	}
-	if s.Data != nil {
-		s.Data.Close()
 	}
 	s.Data = PassiveConn(li)
 	s.Data.Type(s.Type)
 	return nil
 }
 
-// Return an addr with a wildcard port and the same host as the control
-// channel.
-func (s *Session) passiveAddr() string {
+// Return a host to bind the data channel to.
+func (s *Session) passiveHost() string {
+	if s.Server.Host != "" {
+		return s.Server.Host
+	}
 	if s.Server.Addr == "" {
-		return ":0"
+		return ""
 	}
 	host, _, err := net.SplitHostPort(s.Server.Addr)
 	if err != nil {
-		return ":0"
+		return ""
 	}
 	return net.JoinHostPort(host, "0")
 }
