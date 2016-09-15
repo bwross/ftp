@@ -10,6 +10,7 @@ import (
 func main() {
 	server := ftp.Server{
 		Handler: &ftp.FileHandler{
+			Authorizer: ftp.AuthAny,
 			FileSystem: &ftp.LocalFileSystem{},
 		},
 	}

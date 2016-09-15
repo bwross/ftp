@@ -19,6 +19,24 @@ func (a MapAuthorizer) Authorize(user, pass string) (bool, error) {
 	return pass == expect, nil
 }
 
+// An AuthFunc is an authorizer that calls itself.
+type AuthFunc func(user, pass string) (bool, error)
+
+// Authorize implements Authorizer.
+func (f AuthFunc) Authorize(user, pass string) (bool, error) {
+	return f(user, pass)
+}
+
+// AuthAny is an authorizer that accepts any username and password.
+var AuthAny = AuthFunc(func(string, string) (bool, error) {
+	return true, nil
+})
+
+// AuthAnonOnly is an authorizer that only accepts anonymous logins.
+var AuthAnonOnly = AuthFunc(func(user, _ string) (bool, error) {
+	return user == "anonymous", nil
+})
+
 var _ Handler = (*AuthHandler)(nil)
 
 // HandleAuth authorizes a login with the provided Authorizer. If a == nil,
