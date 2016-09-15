@@ -2,7 +2,6 @@ package ftp
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -42,7 +41,6 @@ func (h *FileHandler) Handle(s *Session) error {
 			return err
 		}
 	}
-
 	for {
 		c, err := s.Command()
 		if err != nil {
@@ -135,16 +133,42 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 		mdtm := stat.ModTime().Format(mdtmFormat)
 		return s.Reply(213, mdtm)
 	case "PASV":
-		hp, err := s.Passive()
-		if err != nil {
+		if err := s.Passive("tcp4"); err != nil {
 			return s.Reply(425, "Can't open data connection.")
 		}
-		msg := fmt.Sprintf("Entering Passive Mode (%s).", hp)
-		return s.Reply(227, msg)
+		hp, err := s.Data.HostPort()
+		if err != nil {
+			s.Data.Close()
+			s.Data = nil
+			return s.Reply(425, "Can't open data connection.")
+		}
+		return s.Reply(227, "Entering Passive Mode (%s).", hp)
+	case "EPSV":
+		if err := s.Passive(s.Addr.Network()); err != nil {
+			return s.Reply(425, "Can't open data connection.")
+		}
+		p, err := s.Data.Port()
+		if err != nil {
+			s.Data.Close()
+			s.Data = nil
+			return s.Reply(425, "Can't open data connection.")
+		}
+		return s.Reply(229, "Entering Extended Passive Mode (|||%d|)", p)
 	case "PORT":
-		if err := s.Active(c.Msg); err == ErrInvalidSyntax {
+		addr, err := ParsePORT(c.Msg)
+		if err != nil {
 			return s.Reply(501, "Invalid syntax.")
-		} else if err != nil {
+		}
+		if err := s.Active(addr); err != nil {
+			return s.Reply(550, "Failed to connect.")
+		}
+		return s.Reply(227, "OK")
+	case "EPRT":
+		addr, err := ParseEPRT(c.Msg)
+		if err != nil {
+			return s.Reply(501, "Invalid syntax.")
+		}
+		if err := s.Active(addr); err != nil {
 			return s.Reply(550, "Failed to connect.")
 		}
 		return s.Reply(227, "OK")
