@@ -133,6 +133,9 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 		mdtm := stat.ModTime().Format(mdtmFormat)
 		return s.Reply(213, mdtm)
 	case "PASV":
+		if s.EPSVOnly {
+			return s.Reply(550, "PASV is disallowed.")
+		}
 		if err := s.Passive("tcp4"); err != nil {
 			return s.Reply(425, "Can't open data connection.")
 		}
@@ -144,6 +147,10 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 		}
 		return s.Reply(227, "Entering Passive Mode (%s).", hp)
 	case "EPSV":
+		if c.Msg == "ALL" {
+			s.EPSVOnly = true
+			return s.Reply(200, "EPSV ALL ok.")
+		}
 		if err := s.Passive(s.Addr.Network()); err != nil {
 			return s.Reply(425, "Can't open data connection.")
 		}
@@ -155,6 +162,9 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 		}
 		return s.Reply(229, "Entering Extended Passive Mode (|||%d|)", p)
 	case "PORT":
+		if s.EPSVOnly {
+			return s.Reply(550, "PORT is disallowed.")
+		}
 		addr, err := ParsePORT(c.Msg)
 		if err != nil {
 			return s.Reply(501, "Invalid syntax.")
@@ -162,8 +172,11 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 		if err := s.Active(addr); err != nil {
 			return s.Reply(550, "Failed to connect.")
 		}
-		return s.Reply(227, "OK")
+		return s.Reply(200, "OK")
 	case "EPRT":
+		if s.EPSVOnly {
+			return s.Reply(550, "EPRT is disallowed.")
+		}
 		addr, err := ParseEPRT(c.Msg)
 		if err != nil {
 			return s.Reply(501, "Invalid syntax.")
