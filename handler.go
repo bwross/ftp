@@ -151,7 +151,18 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 			s.EPSVOnly = true
 			return s.Reply(200, "EPSV ALL ok.")
 		}
-		if err := s.Passive(s.Addr.Network()); err != nil {
+		var nw string
+		switch c.Msg {
+		case "1":
+			nw = "tcp4"
+		case "2":
+			nw = "tcp6"
+		case "":
+			nw = s.Addr.Network()
+		default:
+			return s.Reply(522, "Unsupported protocol.")
+		}
+		if err := s.Passive(nw); err != nil {
 			return s.Reply(425, "Can't open data connection.")
 		}
 		p, err := s.Data.Port()
