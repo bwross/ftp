@@ -229,7 +229,7 @@ func (h *FileHandler) store(s *Session, c *Command) error {
 		s.Data.Close()
 		return err
 	}
-	if _, err := io.Copy(s.Data, file); err != nil {
+	if _, err := io.Copy(file, s.Data); err != nil {
 		file.Close()
 		s.Data.Close()
 		return err
