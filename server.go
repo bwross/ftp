@@ -73,7 +73,11 @@ func (s *Server) Serve(l net.Listener) error {
 // ServeFTP serves one client.
 func (s *Server) ServeFTP(c net.Conn) {
 	tc := textproto.NewConn(c)
-	ss := Session{Server: s, conn: tc}
+	ss := Session{
+		Addr:   c.RemoteAddr(),
+		Server: s,
+		conn:   tc,
+	}
 	if s.Handler != nil {
 		s.Handler.Handle(&ss)
 	}

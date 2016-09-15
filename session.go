@@ -11,8 +11,9 @@ var errSessionClosed = errors.New("session is closed")
 
 // A Session represents a single control channel session with a client.
 type Session struct {
-	Server  *Server // Server the session belongs to.
-	Context         // Context shared with the client.
+	Addr    net.Addr // Addr of remote host.
+	Server  *Server  // Server the session belongs to.
+	Context          // Context shared with the client.
 
 	conn    *textproto.Conn
 	cmd     *Command
@@ -47,7 +48,10 @@ func (s *Session) Command() (*Command, error) {
 // Reply sends a reply. This must be called with a non-intermediate reply code
 // in order to allow the next command to be read. After replying to a QUIT
 // command with a non-intermediate response code, the session is closed.
-func (s *Session) Reply(code int, msg string) error {
+func (s *Session) Reply(code int, msg string, args ...interface{}) error {
+	if len(args) > 0 {
+		msg = fmt.Sprintf(msg, args...)
+	}
 	if s.conn == nil {
 		return errSessionClosed
 	}
@@ -93,27 +97,14 @@ func (s *Session) Close() error {
 	return err
 }
 
-// Listen listens through the associated server's listener.
-func (s *Session) Listen(nw, addr string) (net.Listener, error) {
-	return s.Server.listen(nw, addr)
-}
-
-// Dial dials through the associated server's dialer.
-func (s *Session) Dial(nw, addr string) (net.Conn, error) {
-	return s.Server.dial(nw, addr)
-}
-
-// Active establishes an active data channel connection through the associate
+// Active establishes an active data channel connection through the associated
 // server's dialer. This sets s.Data and closes any existing data channel.
-func (s *Session) Active(hp string) error {
+func (s *Session) Active(addr net.Addr) error {
 	if s.Data != nil {
 		s.Data.Close()
+		s.Data = nil
 	}
-	a, err := ParseHostPort(hp)
-	if err != nil {
-		return err
-	}
-	c, err := s.Dial("tcp4", a.String())
+	c, err := s.Server.dial(addr.Network(), addr.String())
 	if err != nil {
 		return err
 	}
@@ -124,25 +115,21 @@ func (s *Session) Active(hp string) error {
 
 // Passive creates a passive connection listening through the associated
 // server's listener. This sets s.Data and closes any existing data channel.
-func (s *Session) Passive() (hp string, err error) {
+func (s *Session) Passive(nw string) error {
 	if s.Data != nil {
 		s.Data.Close()
+		s.Data = nil
 	}
-	li, err := s.Listen("tcp4", s.passiveAddr())
+	li, err := s.Server.listen(nw, s.passiveAddr())
 	if err != nil {
-		return "", err
+		return err
 	}
 	if s.Data != nil {
 		s.Data.Close()
 	}
 	s.Data = PassiveConn(li)
 	s.Data.Type(s.Type)
-	hp, err = s.Data.HostPort()
-	if err != nil {
-		s.Data.Close()
-		return "", err
-	}
-	return hp, nil
+	return nil
 }
 
 // Return an addr with a wildcard port and the same host as the control

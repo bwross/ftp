@@ -10,6 +10,8 @@ type Context struct {
 	Mode     string // Mode of data transfer.
 	Type     string // Type of data channel.
 	Data     *Conn  // Data channel connection.
+
+	EPSVOnly bool // EPSVOnly is true if "EPSV ALL" is set.
 }
 
 // Path returns the absolute path of p, using the working directory as the
