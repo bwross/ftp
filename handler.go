@@ -24,8 +24,8 @@ var _ Handler = (*FileHandler)(nil)
 
 // ServeFiles serves files from fs.
 func ServeFiles(s *Session, fs FileSystem) error {
-	fh := FileHandler{FileSystem: fs}
-	return fh.Handle(s)
+	h := FileHandler{FileSystem: fs}
+	return h.Handle(s)
 }
 
 // A FileHandler serves from a FileSystem.
@@ -41,21 +41,39 @@ func (h *FileHandler) Handle(s *Session) error {
 			return err
 		}
 	}
+	fs := fileSession{
+		Session:    s,
+		FileSystem: h.FileSystem,
+	}
+	return fs.Handle()
+}
+
+// A fileSession wraps session state for a FileHandler.
+type fileSession struct {
+	*Session
+	FileSystem
+	renaming string
+}
+
+func (s *fileSession) Handle() error {
 	for {
 		c, err := s.Command()
 		if err != nil {
 			return err
 		}
-		if err := h.handle(s, c); err != nil {
+		if err := s.handle(c); err != nil {
 			return err
 		}
 		if c.Cmd == "QUIT" {
 			return io.EOF
 		}
+		if c.Cmd != "RNFR" {
+			s.renaming = ""
+		}
 	}
 }
 
-func (h *FileHandler) handle(s *Session, c *Command) error {
+func (s *fileSession) handle(c *Command) error {
 	switch c.Cmd {
 	case "USER":
 		return s.Reply(530, "Cannot change user.")
@@ -80,7 +98,7 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 			return s.Reply(550, "Failed to change directory.")
 		}
 		path := s.Path(c.Msg)
-		if stat, err := h.Stat(path); isPermission(err) {
+		if stat, err := s.Stat(path); isPermission(err) {
 			return s.Reply(550, "Insufficient permissions.")
 		} else if isNotExist(err) {
 			return s.Reply(550, "No such directory.")
@@ -91,7 +109,7 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 		return s.Reply(250, "Directory successfully changed.")
 	case "CDUP":
 		path := s.Path("..")
-		if stat, err := h.Stat(path); isPermission(err) {
+		if stat, err := s.Stat(path); isPermission(err) {
 			return s.Reply(550, "Insufficient permissions.")
 		} else if isNotExist(err) {
 			return s.Reply(550, "No such directory.")
@@ -102,17 +120,17 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 		return s.Reply(250, "Directory successfully changed.")
 	case "MKD":
 		path := s.Path(c.Msg)
-		if err := h.Mkdir(path); err != nil {
+		if err := s.Mkdir(path); err != nil {
 			return s.Reply(550, "Failed to create directory.")
 		}
 		return s.Reply(257, `"`+c.Msg+`" created.`)
 	case "SIZE":
 		path := s.Path(c.Msg)
-		stat, err := h.Stat(path)
+		stat, err := s.Stat(path)
 		if isPermission(err) {
 			return s.Reply(550, "Insufficient permissions.")
 		} else if isNotExist(err) {
-			return s.Reply(550, "No such file or directory.")
+			return s.Reply(550, "No such file.")
 		} else if err != nil {
 			return s.Reply(550, "Could not get size.")
 		} else if stat.IsDir() {
@@ -122,21 +140,56 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 		return s.Reply(213, size)
 	case "MDTM":
 		path := s.Path(c.Msg)
-		stat, err := h.Stat(path)
+		stat, err := s.Stat(path)
 		if isPermission(err) {
 			return s.Reply(550, "Insufficient permissions.")
 		} else if isNotExist(err) {
-			return s.Reply(550, "No such file.")
+			return s.Reply(550, "No such file or directory.")
 		} else if err != nil || stat.IsDir() {
 			return s.Reply(550, "Could not get size.")
 		}
 		mdtm := stat.ModTime().Format(mdtmFormat)
 		return s.Reply(213, mdtm)
+	case "DELE", "RMD":
+		if c.Msg == "" {
+			return s.Reply(501, "A file name is required.")
+		}
+		path := s.Path(c.Msg)
+		if err := s.Remove(path); isPermission(err) {
+			return s.Reply(550, "Insufficient permissions.")
+		} else if isNotExist(err) {
+			return s.Reply(550, "No such file.")
+		} else if err != nil {
+			return s.Reply(550, "Could not delete file.")
+		}
+		return s.Reply(250, "Successfully deleted file.")
+	case "RNFR":
+		if c.Msg == "" {
+			return s.Reply(501, "A file name is required.")
+		}
+		s.renaming = s.Path(c.Msg)
+		return s.Reply(350, "Call RNTO to specify destination.")
+	case "RNTO":
+		if c.Msg == "" {
+			return s.Reply(501, "A file name is required.")
+		} else if s.renaming == "" {
+			return s.Reply(503, "Call RNFR first.")
+		}
+		old, new := s.renaming, s.Path(c.Msg)
+		if err := s.Rename(old, new); isPermission(err) {
+			return s.Reply(550, "Insufficient permissions.")
+		} else if isNotExist(err) {
+			return s.Reply(550, "No such file.")
+		} else if err != nil {
+			return s.Reply(550, "Could not rename file.")
+		}
+		return s.Reply(250, "Successfully renamed file.")
 	case "PASV":
 		if s.EPSVOnly {
 			return s.Reply(550, "PASV is disallowed.")
 		}
 		if err := s.Passive("tcp4"); err != nil {
+			println(err.Error())
 			return s.Reply(425, "Can't open data connection.")
 		}
 		hp, err := s.Data.HostPort()
@@ -197,7 +250,7 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 		}
 		return s.Reply(227, "OK")
 	case "LIST", "NLST":
-		if err := h.list(s, c); err == errNoDataConn {
+		if err := s.list(c); err == errNoDataConn {
 			return s.Reply(425, "Use PORT or PASV first.")
 		} else if isPermission(err) {
 			return s.Reply(550, "Insufficient permissions.")
@@ -208,7 +261,7 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 		}
 		return s.Reply(226, "Directory send OK.")
 	case "RETR":
-		if err := h.retrieve(s, c); err == errNoDataConn {
+		if err := s.retrieve(c); err == errNoDataConn {
 			return s.Reply(425, "Use PORT or PASV first.")
 		} else if isPermission(err) {
 			return s.Reply(550, "Insufficient permissions.")
@@ -219,7 +272,7 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 		}
 		return s.Reply(226, "Transfer complete.")
 	case "STOR":
-		if err := h.store(s, c); err == errNoDataConn {
+		if err := s.store(c); err == errNoDataConn {
 			return s.Reply(425, "Use PORT or PASV first.")
 		} else if isPermission(err) {
 			return s.Reply(550, "Insufficient permissions.")
@@ -237,12 +290,12 @@ func (h *FileHandler) handle(s *Session, c *Command) error {
 }
 
 // Handler for RETR.
-func (h *FileHandler) retrieve(s *Session, c *Command) error {
+func (s *fileSession) retrieve(c *Command) error {
 	if s.Data == nil {
 		return errNoDataConn
 	}
 	path := s.Path(c.Msg)
-	file, err := h.Open(path)
+	file, err := s.Open(path)
 	if err != nil {
 		s.Data.Close()
 		return err
@@ -262,12 +315,12 @@ func (h *FileHandler) retrieve(s *Session, c *Command) error {
 }
 
 // Handler for STOR.
-func (h *FileHandler) store(s *Session, c *Command) error {
+func (s *fileSession) store(c *Command) error {
 	if s.Data == nil {
 		return errNoDataConn
 	}
 	path := s.Path(c.Msg)
-	file, err := h.Create(path)
+	file, err := s.Create(path)
 	if err != nil {
 		s.Data.Close()
 		return err
@@ -288,12 +341,12 @@ func (h *FileHandler) store(s *Session, c *Command) error {
 }
 
 // Handler for LIST and NLST.
-func (h *FileHandler) list(s *Session, c *Command) error {
+func (s *fileSession) list(c *Command) error {
 	if s.Data == nil {
 		return errNoDataConn
 	}
 	path := s.Path(stripListFlags(c.Msg))
-	file, err := h.Open(path)
+	file, err := s.Open(path)
 	if err != nil {
 		s.Data.Close()
 		return err

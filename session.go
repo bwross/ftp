@@ -141,7 +141,7 @@ func (s *Session) passiveHost() string {
 	if err != nil {
 		return ""
 	}
-	return net.JoinHostPort(host, "0")
+	return host
 }
 
 // SetType sets s.Type as well as the type of any existing data channel.
