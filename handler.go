@@ -92,7 +92,8 @@ func (s *fileSession) handle(c *Command) error {
 		}
 		return s.Reply(200, "Mode switched successfully.")
 	case "PWD":
-		return s.Reply(200, s.Path(""))
+		path := s.Path("")
+		return s.Reply(257, "%s is the current directory.", quote(path))
 	case "CWD":
 		if c.Msg == "" {
 			return s.Reply(550, "Failed to change directory.")
@@ -123,7 +124,7 @@ func (s *fileSession) handle(c *Command) error {
 		if err := s.Mkdir(path); err != nil {
 			return s.Reply(550, "Failed to create directory.")
 		}
-		return s.Reply(257, `"`+c.Msg+`" created.`)
+		return s.Reply(257, "%s created.", quote(path))
 	case "SIZE":
 		path := s.Path(c.Msg)
 		stat, err := s.Stat(path)
@@ -399,4 +400,9 @@ func isNotExist(err error) bool {
 // Check if an error implies a file already exists.
 func isExist(err error) bool {
 	return os.IsPermission(err)
+}
+
+// Quote returns a quoted string with double-escaped quotes.
+func quote(s string) string {
+	return `"` + strings.Replace(s, `"`, `""`, -1) + `"`
 }
