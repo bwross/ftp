@@ -22,3 +22,14 @@ func (c *Context) Path(p string) string {
 	}
 	return path.Join("/", c.Dir, p)
 }
+
+// CloseData closes the data connection and sets it to nil. If there is no data
+// connection, this returns an error.
+func (c *Context) CloseData() error {
+	if c.Data == nil {
+		return errNoDataConn
+	}
+	conn := c.Data
+	c.Data = nil
+	return conn.Close()
+}
