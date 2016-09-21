@@ -35,14 +35,15 @@ func (s *Session) Command() (*Command, error) {
 	if s.cmd != nil {
 		return s.cmd, nil
 	}
-	s.cmd = new(Command)
-	if err := s.cmd.Decode(&s.conn.Reader); err != nil {
+	cmd := new(Command)
+	if err := cmd.Decode(&s.conn.Reader); err != nil {
 		return nil, err
 	}
+	s.cmd = cmd
 	if s.Server.Debug {
-		fmt.Println("<", s.cmd)
+		fmt.Println("<", cmd)
 	}
-	return s.cmd, nil
+	return cmd, nil
 }
 
 // Reply sends a reply. This must be called with a non-intermediate reply code
