@@ -92,6 +92,7 @@ func (s *Session) Close() error {
 	if s.cmd != nil || !s.greeted {
 		s.Reply(421, DefaultGoodbye)
 	}
+	s.CloseData()
 	err := s.conn.Close()
 	s.conn = nil
 	return err

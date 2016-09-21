@@ -194,8 +194,7 @@ func (s *fileSession) handle(c *Command) error {
 		}
 		hp, err := s.Data.HostPort()
 		if err != nil {
-			s.Data.Close()
-			s.Data = nil
+			s.CloseData()
 			return s.Reply(425, "Can't open data connection.")
 		}
 		return s.Reply(227, "Entering Passive Mode (%s).", hp)
@@ -220,8 +219,7 @@ func (s *fileSession) handle(c *Command) error {
 		}
 		p, err := s.Data.Port()
 		if err != nil {
-			s.Data.Close()
-			s.Data = nil
+			s.CloseData()
 			return s.Reply(425, "Can't open data connection.")
 		}
 		return s.Reply(229, "Entering Extended Passive Mode (|||%d|)", p)
@@ -297,21 +295,21 @@ func (s *fileSession) retrieve(c *Command) error {
 	path := s.Path(c.Msg)
 	file, err := s.Open(path)
 	if err != nil {
-		s.Data.Close()
+		s.CloseData()
 		return err
 	}
 	if err := s.Reply(150, "Here comes the file."); err != nil {
 		file.Close()
-		s.Data.Close()
+		s.CloseData()
 		return err
 	}
 	if _, err := io.Copy(s.Data, file); err != nil {
 		file.Close()
-		s.Data.Close()
+		s.CloseData()
 		return err
 	}
 	file.Close()
-	return s.Data.Close()
+	return s.CloseData()
 }
 
 // Handler for STOR.
@@ -322,21 +320,21 @@ func (s *fileSession) store(c *Command) error {
 	path := s.Path(c.Msg)
 	file, err := s.Create(path)
 	if err != nil {
-		s.Data.Close()
+		s.CloseData()
 		return err
 	}
 	if err := s.Reply(150, "Awaiting file data."); err != nil {
 		file.Close()
-		s.Data.Close()
+		s.CloseData()
 		return err
 	}
 	if _, err := io.Copy(file, s.Data); err != nil {
 		file.Close()
-		s.Data.Close()
+		s.CloseData()
 		return err
 	}
 	err = file.Close()
-	s.Data.Close()
+	s.CloseData()
 	return err
 }
 
@@ -348,12 +346,12 @@ func (s *fileSession) list(c *Command) error {
 	path := s.Path(stripListFlags(c.Msg))
 	file, err := s.Open(path)
 	if err != nil {
-		s.Data.Close()
+		s.CloseData()
 		return err
 	}
 	if err := s.Reply(150, "Here comes the list."); err != nil {
 		file.Close()
-		s.Data.Close()
+		s.CloseData()
 		return err
 	}
 	list := Lister{
@@ -362,11 +360,11 @@ func (s *fileSession) list(c *Command) error {
 	}
 	if _, err := list.WriteTo(s.Data); err != nil {
 		file.Close()
-		s.Data.Close()
+		s.CloseData()
 		return err
 	}
 	file.Close()
-	return s.Data.Close()
+	return s.CloseData()
 }
 
 // Some clients assume LIST accepts flags like ls. This removes those.
