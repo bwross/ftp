@@ -52,7 +52,9 @@ func (h *FileHandler) Handle(s *Session) error {
 type fileSession struct {
 	*Session
 	FileSystem
-	renaming string
+
+	renaming string // The file we're renaming, if any.
+	epsvOnly bool   // Whether we saw "EPSV ALL".
 }
 
 func (s *fileSession) Handle() error {
@@ -186,7 +188,7 @@ func (s *fileSession) handle(c *Command) error {
 		}
 		return s.Reply(250, "Successfully renamed file.")
 	case "PASV":
-		if s.EPSVOnly {
+		if s.epsvOnly {
 			return s.Reply(550, "PASV is disallowed.")
 		}
 		if err := s.Passive("tcp4"); err != nil {
@@ -201,7 +203,7 @@ func (s *fileSession) handle(c *Command) error {
 		return s.Reply(227, "Entering Passive Mode (%s).", hp)
 	case "EPSV":
 		if c.Msg == "ALL" {
-			s.EPSVOnly = true
+			s.epsvOnly = true
 			return s.Reply(200, "EPSV ALL ok.")
 		}
 		var nw string
@@ -225,7 +227,7 @@ func (s *fileSession) handle(c *Command) error {
 		}
 		return s.Reply(229, "Entering Extended Passive Mode (|||%d|)", p)
 	case "PORT":
-		if s.EPSVOnly {
+		if s.epsvOnly {
 			return s.Reply(550, "PORT is disallowed.")
 		}
 		addr, err := ParsePORT(c.Msg)
@@ -237,7 +239,7 @@ func (s *fileSession) handle(c *Command) error {
 		}
 		return s.Reply(200, "OK")
 	case "EPRT":
-		if s.EPSVOnly {
+		if s.epsvOnly {
 			return s.Reply(550, "EPRT is disallowed.")
 		}
 		addr, err := ParseEPRT(c.Msg)
