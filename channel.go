@@ -49,10 +49,14 @@ type Reply struct {
 func (r *Reply) Encode(w *textproto.Writer) error {
 	lines := r.Lines()
 	last := len(lines) - 1
-	for _, line := range lines[:last] {
-		err := w.PrintfLine("%03d-%s", r.Code, line)
-		if err != nil {
+	if len(lines) > 1 {
+		if err := w.PrintfLine("%03d-%s", r.Code, lines[0]); err != nil {
 			return err
+		}
+		for _, line := range lines[1:last] {
+			if err := w.PrintfLine(" %s", line); err != nil {
+				return err
+			}
 		}
 	}
 	return w.PrintfLine("%03d %s", r.Code, lines[last])

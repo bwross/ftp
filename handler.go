@@ -281,6 +281,28 @@ func (s *fileSession) handle(c *Command) error {
 			return s.Reply(550, "Error storing file.")
 		}
 		return s.Reply(226, "Transfer complete.")
+	case "OPTS":
+		if c.Msg == "UTF8 ON" {
+			return s.Reply(200, "Always in UTF8 mode.")
+		}
+		return s.Reply(501, "Option not understood.")
+	case "FEAT":
+		return s.Reply(211,
+			`Extensions supported:
+EPRT
+EPSV
+MDTM
+PASV
+SIZE
+UTF8
+End.`)
+	case "HELP":
+		return s.Reply(214,
+			`The following commands are recognized.
+CDUP CWD  DELE EPRT EPSV FEAT HELP LIST MDTM MKD  MODE NLST
+NOOP OPTS PASS PASV PORT PWD  QUIT RETR RMD  RNFR RNTO SIZE
+STOR SYST TYPE USER
+Help OK.`)
 	case "NOOP":
 		return s.Reply(200, "OK.")
 	case "QUIT":
