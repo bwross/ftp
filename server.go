@@ -24,7 +24,6 @@ type Listener interface {
 // A Server serves incoming connections.
 type Server struct {
 	Addr     string   // Addr to bind the control channel to.
-	Host     string   // Host to bind passive data connections to.
 	Dialer   Dialer   // Dialer for active connections.
 	Listener Listener // Listener for passive connections.
 	Handler  Handler  // Handler for commands.
@@ -73,11 +72,13 @@ func (s *Server) Serve(l net.Listener) error {
 
 // ServeFTP serves one client.
 func (s *Server) ServeFTP(c net.Conn) {
-	tc := textproto.NewConn(c)
 	ss := Session{
 		Addr:   c.RemoteAddr(),
 		Server: s,
-		conn:   tc,
+		conn:   textproto.NewConn(c),
+	}
+	if a, ok := c.LocalAddr().(*net.TCPAddr); ok {
+		ss.host = a.IP.String()
 	}
 	if s.Handler != nil {
 		s.Handler.Handle(&ss)
