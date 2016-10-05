@@ -121,15 +121,7 @@ func (c *Conn) Active() bool {
 // Addr returns the listening address if this is a passive connection.
 // Otherwise, this returns the remote address of the active connection.
 func (c *Conn) Addr() net.Addr {
-	var addr net.Addr
-	c.m.Lock()
-	if c.passive != nil {
-		addr = c.passive.Addr()
-	} else {
-		addr = c.active.RemoteAddr()
-	}
-	c.m.Unlock()
-	return addr
+	return c.addr
 }
 
 // Port returns the port associated with c.Addr().

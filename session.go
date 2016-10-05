@@ -15,6 +15,7 @@ type Session struct {
 	Server  *Server  // Server the session belongs to.
 	Context          // Context shared with the client.
 
+	host    string
 	conn    *textproto.Conn
 	cmd     *Command
 	greeted bool
@@ -122,28 +123,14 @@ func (s *Session) Passive(nw string) error {
 		s.Data.Close()
 		s.Data = nil
 	}
-	li, err := s.Server.listen(nw, s.passiveHost()+":0")
+	addr := net.JoinHostPort(s.host, "0")
+	li, err := s.Server.listen(nw, addr)
 	if err != nil {
 		return err
 	}
 	s.Data = PassiveConn(li)
 	s.Data.Type(s.Type)
 	return nil
-}
-
-// Return a host to bind the data channel to.
-func (s *Session) passiveHost() string {
-	if s.Server.Host != "" {
-		return s.Server.Host
-	}
-	if s.Server.Addr == "" {
-		return ""
-	}
-	host, _, err := net.SplitHostPort(s.Server.Addr)
-	if err != nil {
-		return ""
-	}
-	return host
 }
 
 // SetType sets s.Type as well as the type of any existing data channel.
