@@ -1,6 +1,7 @@
 package ftp
 
 import (
+	"crypto/tls"
 	"net"
 	"net/textproto"
 )
@@ -23,11 +24,12 @@ type Listener interface {
 
 // A Server serves incoming connections.
 type Server struct {
-	Addr     string   // Addr to bind the control channel to.
-	Dialer   Dialer   // Dialer for active connections.
-	Listener Listener // Listener for passive connections.
-	Handler  Handler  // Handler for commands.
-	Debug    bool     // Debug prints control channel traffic.
+	Addr     string      // Addr to bind the control channel to.
+	TLS      *tls.Config // TLS config enables FTPS if non-nil.
+	Dialer   Dialer      // Dialer for active connections.
+	Listener Listener    // Listener for passive connections.
+	Handler  Handler     // Handler for commands.
+	Debug    bool        // Debug prints control channel traffic.
 }
 
 // Listen through the server's listener.
@@ -50,7 +52,11 @@ func (s *Server) dial(nw, addr string) (net.Conn, error) {
 func (s *Server) ListenAndServe() error {
 	a := s.Addr
 	if a == "" {
-		a = ":ftp"
+		if s.TLS == nil {
+			a = ":ftp"
+		} else {
+			a = ":ftps"
+		}
 	}
 	l, err := s.listen("tcp", a)
 	if err != nil {
@@ -61,6 +67,9 @@ func (s *Server) ListenAndServe() error {
 
 // Serve incoming connections over l.
 func (s *Server) Serve(l net.Listener) error {
+	if s.TLS != nil {
+		l = tls.NewListener(l, s.TLS)
+	}
 	for {
 		c, err := l.Accept()
 		if err != nil {
