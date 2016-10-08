@@ -1,6 +1,7 @@
 package ftp
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +15,8 @@ type Session struct {
 	Addr    net.Addr // Addr of remote host.
 	Server  *Server  // Server the session belongs to.
 	Context          // Context shared with the client.
+
+	TLS *tls.Config // TLS config to use for data connections.
 
 	host    string
 	conn    *textproto.Conn
@@ -111,6 +114,9 @@ func (s *Session) Active(addr net.Addr) error {
 	if err != nil {
 		return err
 	}
+	if s.TLS != nil {
+		c = tls.Server(c, s.TLS)
+	}
 	s.Data = ActiveConn(c)
 	s.Data.Type(s.Type)
 	return nil
@@ -127,6 +133,9 @@ func (s *Session) Passive(nw string) error {
 	li, err := s.Server.listen(nw, addr)
 	if err != nil {
 		return err
+	}
+	if s.TLS != nil {
+		li = tls.NewListener(li, s.TLS)
 	}
 	s.Data = PassiveConn(li)
 	s.Data.Type(s.Type)

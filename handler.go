@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -281,27 +282,43 @@ func (s *fileSession) handle(c *Command) error {
 			return s.Reply(550, "Error storing file.")
 		}
 		return s.Reply(226, "Transfer complete.")
+	case "PBSZ":
+		if s.Server.TLS == nil {
+			return s.Reply(502, "Not implemented.")
+		}
+		if c.Msg == "0" {
+			return s.Reply(200, "OK.")
+		}
+		return s.Reply(534, "Unacceptable buffer size. PBSZ=0")
+	case "PROT":
+		if s.Server.TLS == nil {
+			return s.Reply(502, "Not implemented.")
+		}
+		switch c.Msg {
+		case "P":
+			s.TLS = s.Server.TLS
+		case "C":
+			s.TLS = nil
+		default:
+			return s.Reply(504, "Unsupported protection level.")
+		}
+		return s.Reply(200, "Protection level changed.")
 	case "OPTS":
 		if c.Msg == "UTF8 ON" {
 			return s.Reply(200, "Always in UTF8 mode.")
 		}
 		return s.Reply(501, "Option not understood.")
 	case "FEAT":
-		return s.Reply(211,
-			`Extensions supported:
-EPRT
-EPSV
-MDTM
-PASV
-SIZE
-UTF8
-End.`)
+		msg := []string{"Extensions supported:"}
+		msg = append(msg, s.features()...)
+		msg = append(msg, "End.")
+		return s.Reply(211, strings.Join(msg, "\n"))
 	case "HELP":
 		return s.Reply(214,
 			`The following commands are recognized.
 CDUP CWD  DELE EPRT EPSV FEAT HELP LIST MDTM MKD  MODE NLST
-NOOP OPTS PASS PASV PORT PWD  QUIT RETR RMD  RNFR RNTO SIZE
-STOR SYST TYPE USER
+NOOP OPTS PASS PASV PBSZ PORT PROT PWD  QUIT RETR RMD  RNFR
+RNTO SIZE STOR SYST TYPE USER
 Help OK.`)
 	case "NOOP":
 		return s.Reply(200, "OK.")
@@ -310,6 +327,16 @@ Help OK.`)
 	default:
 		return s.Reply(502, "Not implemented.")
 	}
+}
+
+// Return supported features.
+func (s *fileSession) features() []string {
+	f := []string{"EPRT", "EPSV", "MDTM", "PASV", "SIZE", "UTF8"}
+	if s.Server.TLS != nil {
+		f = append(f, "PBSZ", "PROT")
+	}
+	sort.Strings(f)
+	return f
 }
 
 // Handler for RETR.
