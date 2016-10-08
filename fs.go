@@ -21,7 +21,10 @@ type FileSystem interface {
 
 // File is the interface returned by certain FileSystem methods.
 type File interface {
-	io.ReadWriteCloser
+	io.Reader
+	io.Writer
+	io.Seeker
+	io.Closer
 
 	// Readdir has semantics like os.Readdir.
 	Readdir(n int) ([]os.FileInfo, error)
