@@ -23,37 +23,33 @@ type Handler interface {
 
 var _ Handler = (*FileHandler)(nil)
 
-// ServeFiles serves files from fs.
-func ServeFiles(s *Session, fs FileSystem) error {
-	h := FileHandler{FileSystem: fs}
-	return h.Handle(s)
+// An Authorizer can be used with a FileHandler to handle login.
+type Authorizer interface {
+	// Authorize the user. Returning an error closes the session.
+	Authorize(user, pass string) (bool, error)
 }
 
 // A FileHandler serves from a FileSystem.
 type FileHandler struct {
-	Authorizer // Authorizer for login, skipped if nil.
+	Authorizer // Authorizer for login. If nil, accept all.
 	FileSystem // FileSystem to serve.
 }
 
 // Handle implements Handler.
 func (h *FileHandler) Handle(s *Session) error {
-	if h.Authorizer != nil {
-		if err := HandleAuth(s, h.Authorizer); err != nil {
-			return err
-		}
-	}
 	fs := fileSession{
-		Session:    s,
-		FileSystem: h.FileSystem,
+		FileHandler: h,
+		Session:     s,
 	}
 	return fs.Handle()
 }
 
 // A fileSession wraps session state for a FileHandler.
 type fileSession struct {
+	*FileHandler
 	*Session
-	FileSystem
 
+	authed   bool   // Whether we're done with auth.
 	renaming string // The file we're renaming, if any.
 	epsvOnly bool   // Whether we saw "EPSV ALL".
 	restart  int64  // Restart offset.
@@ -81,11 +77,59 @@ func (s *fileSession) Handle() error {
 }
 
 func (s *fileSession) handle(c *Command) error {
+	if !s.authed {
+		return s.handlePreAuth(c)
+	}
+	return s.handlePostAuth(c)
+}
+
+func (s *fileSession) handlePreAuth(c *Command) error {
 	switch c.Cmd {
 	case "USER":
-		return s.Reply(530, "Cannot change user.")
+		if s.authed {
+			return s.Reply(530, "Cannot change user.")
+		}
+		if c.Msg == "" {
+			return s.Reply(504, "A user name is required.")
+		}
+		s.User = c.Msg
+		return s.Reply(331, "Please specify the password.")
 	case "PASS":
-		return s.Reply(230, "Already logged in.")
+		if s.authed {
+			return s.Reply(230, "Already logged in.")
+		}
+		if s.User == "" {
+			return s.Reply(503, "Log in with USER first.")
+		}
+		if s.Authorizer != nil {
+			if ok, err := s.Authorize(s.User, c.Msg); err != nil {
+				s.User = ""
+				return err
+			} else if !ok {
+				s.User = ""
+				return s.Reply(430, "Invalid user name or password.")
+			}
+		}
+		s.Password = c.Msg
+		s.authed = true
+		return s.Reply(230, "Login successful.")
+	case "FEAT":
+		msg := []string{"Extensions supported:"}
+		msg = append(msg, s.features()...)
+		msg = append(msg, "End.")
+		return s.Reply(211, strings.Join(msg, "\n"))
+	case "QUIT":
+		return s.Reply(211, "Goodbye.")
+	default:
+		if !s.authed {
+			return s.Reply(530, "Log in with USER and PASS.")
+		}
+		return s.Reply(502, "Not implemented.")
+	}
+}
+
+func (s *fileSession) handlePostAuth(c *Command) error {
+	switch c.Cmd {
 	case "SYST":
 		return s.Reply(215, "UNIX Type: L8")
 	case "TYPE":
@@ -319,11 +363,6 @@ func (s *fileSession) handle(c *Command) error {
 			return s.Reply(200, "Always in UTF8 mode.")
 		}
 		return s.Reply(501, "Option not understood.")
-	case "FEAT":
-		msg := []string{"Extensions supported:"}
-		msg = append(msg, s.features()...)
-		msg = append(msg, "End.")
-		return s.Reply(211, strings.Join(msg, "\n"))
 	case "HELP":
 		return s.Reply(214,
 			`The following commands are recognized.
@@ -333,10 +372,8 @@ SYST TYPE USER
 Help OK.`)
 	case "NOOP":
 		return s.Reply(200, "OK.")
-	case "QUIT":
-		return s.Reply(211, "Goodbye.")
 	default:
-		return s.Reply(502, "Not implemented.")
+		return s.handlePreAuth(c)
 	}
 }
 
