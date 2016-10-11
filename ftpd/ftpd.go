@@ -17,7 +17,6 @@ func main() {
 		Addr: *addr,
 		Host: *host,
 		Handler: &ftp.FileHandler{
-			Authorizer: ftp.AuthAny,
 			FileSystem: &ftp.LocalFileSystem{},
 		},
 	}

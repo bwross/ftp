@@ -20,7 +20,6 @@ func TestServer(t *testing.T) {
 		Addr:  ":2121",
 		Debug: true,
 		Handler: &FileHandler{
-			Authorizer: AuthAny,
 			FileSystem: &LocalFileSystem{},
 		},
 	}
@@ -79,7 +78,6 @@ func TestServer(t *testing.T) {
 		TLS:   cfg,
 		Debug: true,
 		Handler: &FileHandler{
-			Authorizer: AuthAny,
 			FileSystem: &LocalFileSystem{},
 		},
 	}
