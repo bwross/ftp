@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"math/rand"
 	"net"
 	"strconv"
 	"strings"
@@ -125,38 +124,29 @@ func (c *Conn) Addr() net.Addr {
 }
 
 // Port returns the port associated with c.Addr().
-func (c *Conn) Port() (int, error) {
-	addr := c.Addr()
-	if t, ok := addr.(*net.TCPAddr); ok {
-		return t.Port, nil
-	}
-	_, port, err := net.SplitHostPort(addr.String())
-	if err != nil {
-		return 0, err
-	}
-	return net.LookupPort(addr.Network(), port)
+func (c *Conn) Port() int {
+	return c.Addr().(*net.TCPAddr).Port
 }
 
 // HostPort is shorthand for HostPort(c.Addr()).
-func (c *Conn) HostPort() (string, error) {
-	return HostPort(c.Addr())
+func (c *Conn) HostPort() string {
+	return HostPort(c.Addr().(*net.TCPAddr))
 }
 
-// EHostPort is shorthand for EHostPort("", c.Addr()).
-func (c *Conn) EHostPort() (string, error) {
-	return EHostPort("", c.Addr())
+// EHostPort is shorthand for EHostPort(c.Addr()).
+func (c *Conn) EHostPort() string {
+	return EHostPort(c.Addr().(*net.TCPAddr))
 }
 
-// Read implements io.Reader. If a connection has not been established, this
-// waits for a connection.
-func (c *Conn) Read(b []byte) (n int, err error) {
+// Wait for the connection and return the underlying reader.
+func (c *Conn) reader() (*bufio.Reader, error) {
 	c.m.Lock()
 	for c.active == nil && c.err == nil {
 		c.m.Wait()
 	}
 	if err := c.err; err != nil {
 		c.m.Unlock()
-		return 0, err
+		return nil, err
 	}
 	if c.r == nil {
 		c.r = bufio.NewReader(c.active)
@@ -164,7 +154,36 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 	r := c.r
 	c.m.Unlock()
 
+	return r, nil
+}
+
+// Read implements io.Reader. If a connection has not been established, this
+// waits for a connection.
+func (c *Conn) Read(b []byte) (n int, err error) {
+	r, err := c.reader()
+	if err != nil {
+		return 0, err
+	}
 	return r.Read(b)
+}
+
+// ReadLine reads a line. If a connection has not been established, this waits
+// for a connection.
+func (c *Conn) ReadLine() (line string, err error) {
+	r, err := c.reader()
+	if err != nil {
+		return "", err
+	}
+	for {
+		b, pre, err := r.ReadLine()
+		if err != nil {
+			return "", err
+		}
+		line += string(b)
+		if !pre {
+			return line, nil
+		}
+	}
 }
 
 // Write implements io.Writer. If a connection has not been established, this
@@ -277,74 +296,28 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return conn.SetWriteDeadline(t)
 }
 
-// Attempt to derive an IP and port from addr.
-func findIPAndPort(addr net.Addr) (net.IP, int, error) {
-	if t, ok := addr.(*net.TCPAddr); ok {
-		return t.IP, t.Port, nil
-	}
-	host, port, err := net.SplitHostPort(addr.String())
-	if err != nil {
-		return nil, 0, err
-	}
-	p, err := net.LookupPort(addr.Network(), port)
-	if err != nil {
-		return nil, 0, err
-	}
-	if host == "" {
-		return net.IPv4zero, p, nil
-	}
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return nil, 0, err
-	}
-	if len(ips) == 0 {
-		return net.IPv4zero, p, nil
-	}
-	i := rand.Intn(len(ips))
-	return ips[i], p, nil
-}
-
 // HostPort converts addr into a string suitable for use with PASV or PORT.
-func HostPort(addr net.Addr) (string, error) {
-	h, p, err := findIPAndPort(addr)
-	if err != nil {
-		return "", err
-	}
+func HostPort(addr *net.TCPAddr) string {
+	h, p := addr.IP, addr.Port
 	if h = h.To4(); h == nil {
-		return "", errors.New("unsupported address")
+		h = net.IPv4zero
 	}
 	return fmt.Sprintf("%d,%d,%d,%d,%d,%d",
-		h[0], h[1], h[2], h[3], p/256, p%256), nil
+		h[0], h[1], h[2], h[3], p/256, p%256)
 }
 
-// EHostPort converts addr into a string suitable for use with EPRT. d is the
-// delimiter used in formatting the address, and must either be "" (in which
-// case "|" is used) or a single ASCII character in the inclusive range between
-// "!" and "~".
-func EHostPort(d string, addr net.Addr) (string, error) {
-	if d == "" {
-		d = "|"
-	} else if !validDelimiter(d) {
-		return "", errors.New("invalid delimiter")
-	}
-	h, p, err := findIPAndPort(addr)
-	if err != nil {
-		return "", err
-	}
+// EHostPort converts addr into a string suitable for use with EPRT.
+func EHostPort(addr *net.TCPAddr) string {
+	h, p, d := addr.IP, addr.Port, "|"
 	var parts []string
 	if len(h) == 4 {
 		parts = []string{"1", h.String(), strconv.Itoa(p)}
 	} else if len(h) == 16 {
 		parts = []string{"2", h.String(), strconv.Itoa(p)}
 	} else {
-		return "", errors.New("unsupported address")
+		panic("unsupported address")
 	}
-	for _, s := range parts {
-		if strings.Contains(s, d) {
-			return "", errors.New("invalid delimiter")
-		}
-	}
-	return d + strings.Join(parts, d) + d, nil
+	return d + strings.Join(parts, d) + d
 }
 
 // ParsePASV extracts an address from a PASV reply message.

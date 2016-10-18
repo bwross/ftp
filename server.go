@@ -48,8 +48,10 @@ func (s *Server) dial(nw, addr string) (net.Conn, error) {
 	return net.Dial(nw, addr)
 }
 
-// ListenAndServe listens on s.Addr and serves incoming connections.
-func (s *Server) ListenAndServe() error {
+// ListenAndServe listens on s.Addr and serves incoming connections. If fork is
+// true, Serve is called on a new goroutine. Otherwise, Serve is called on this
+// goroutine.
+func (s *Server) ListenAndServe(fork bool) (net.Listener, error) {
 	a := s.Addr
 	if a == "" {
 		if s.TLS == nil {
@@ -60,9 +62,13 @@ func (s *Server) ListenAndServe() error {
 	}
 	l, err := s.listen("tcp", a)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return s.Serve(l)
+	if fork {
+		go s.Serve(l)
+		return l, nil
+	}
+	return l, s.Serve(l)
 }
 
 // Serve incoming connections over l.
