@@ -66,12 +66,27 @@ func (l *Lister) writeLine(w io.Writer, fi os.FileInfo) (n int, err error) {
 	time := formatTime(fi.ModTime())
 	name := fi.Name()
 
-	return fmt.Fprintln(w, mode, nlinks, user, group, size, time, name)
+	return fmt.Fprintf(w, "%10s %d %6s %6s %7d %12s %s\n",
+		mode, nlinks, user, group, size, time, name)
 }
 
 func formatTime(t time.Time) string {
 	if t.Year() == time.Now().Year() {
-		return t.Format("Jan 2 15:04")
+		return t.Format("Jan _2 15:04")
 	}
-	return t.Format("Jan 2 2006")
+	return t.Format("Jan _2 2006")
 }
+
+type stat struct {
+	name string
+	size int64
+	mode os.FileMode
+	time time.Time
+}
+
+func (s *stat) Name() string       { return s.name }
+func (s *stat) Size() int64        { return s.size }
+func (s *stat) ModTime() time.Time { return s.time }
+func (s *stat) Mode() os.FileMode  { return s.mode }
+func (s *stat) IsDir() bool        { return s.mode.IsDir() }
+func (s *stat) Sys() interface{}   { return nil }

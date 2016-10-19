@@ -9,17 +9,15 @@ import (
 
 func main() {
 	addr := flag.String("addr", "", "addr to bind control channel")
-	host := flag.String("host", "", "host to bind passive data channels")
 
 	flag.Parse()
 
 	server := ftp.Server{
 		Addr: *addr,
-		Host: *host,
 		Handler: &ftp.FileHandler{
 			FileSystem: &ftp.LocalFileSystem{},
 		},
 	}
-	err := server.ListenAndServe()
+	_, err := server.ListenAndServe(false)
 	fmt.Println(err)
 }

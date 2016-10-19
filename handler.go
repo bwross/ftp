@@ -244,11 +244,7 @@ func (s *fileSession) handlePostAuth(c *Command) error {
 			println(err.Error())
 			return s.Reply(425, "Can't open data connection.")
 		}
-		hp, err := s.Data.HostPort()
-		if err != nil {
-			s.CloseData()
-			return s.Reply(425, "Can't open data connection.")
-		}
+		hp := s.Data.HostPort()
 		return s.Reply(227, "Entering Passive Mode (%s).", hp)
 	case "EPSV":
 		if c.Msg == "ALL" {
@@ -269,11 +265,7 @@ func (s *fileSession) handlePostAuth(c *Command) error {
 		if err := s.Passive(nw); err != nil {
 			return s.Reply(425, "Can't open data connection.")
 		}
-		p, err := s.Data.Port()
-		if err != nil {
-			s.CloseData()
-			return s.Reply(425, "Can't open data connection.")
-		}
+		p := s.Data.Port()
 		return s.Reply(229, "Entering Extended Passive Mode (|||%d|)", p)
 	case "PORT":
 		if s.epsvOnly {
@@ -298,7 +290,7 @@ func (s *fileSession) handlePostAuth(c *Command) error {
 		if err := s.Active(addr); err != nil {
 			return s.Reply(550, "Failed to connect.")
 		}
-		return s.Reply(227, "OK")
+		return s.Reply(200, "OK")
 	case "REST":
 		n, err := strconv.ParseInt(c.Msg, 10, 64)
 		if err != nil || n < 0 {

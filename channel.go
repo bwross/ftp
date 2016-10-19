@@ -14,6 +14,14 @@ type Command struct {
 	Msg string // Msg is the full message.
 }
 
+// Encode c into w.
+func (c *Command) Encode(w *textproto.Writer) error {
+	if c.Msg == "" {
+		return w.PrintfLine("%s", c.Cmd)
+	}
+	return w.PrintfLine("%s %s", c.Cmd, c.Msg)
+}
+
 // Decode from r into c.
 func (c *Command) Decode(r *textproto.Reader) error {
 	line, err := r.ReadLine()
@@ -77,4 +85,19 @@ func (r *Reply) Decode(tr *textproto.Reader) error {
 func (r *Reply) Lines() []string {
 	msg := strings.Replace(r.Msg, "\r\n", "\n", -1)
 	return strings.Split(msg, "\n")
+}
+
+// Preliminary returns whether r.Code is 1xx.
+func (r *Reply) Preliminary() bool {
+	return r.Code >= 100 && r.Code < 200
+}
+
+// Success returns whether r.Code is 2xx.
+func (r *Reply) Success() bool {
+	return r.Code >= 200 && r.Code < 300
+}
+
+// Intermediate returns whether r.Code is 3xx.
+func (r *Reply) Intermediate() bool {
+	return r.Code >= 300 && r.Code < 400
 }
