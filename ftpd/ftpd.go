@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/bwross/ftp"
+	"github.com/igneous-systems/ftp"
 )
 
 func main() {
