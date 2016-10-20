@@ -57,7 +57,18 @@ func (l *Lister) writeLine(w io.Writer, fi os.FileInfo) (n int, err error) {
 	if l.Cmd == "NLST" {
 		return fmt.Fprintln(w, fi.Name())
 	}
+	return fmt.Fprintln(w, listLine(fi))
+}
 
+func listLines(fi []os.FileInfo) []string {
+	l := make([]string, len(fi))
+	for i, fi := range fi {
+		l[i] = listLine(fi)
+	}
+	return l
+}
+
+func listLine(fi os.FileInfo) string {
 	mode := fi.Mode()
 	nlinks := 1
 	user := "user"
@@ -66,7 +77,7 @@ func (l *Lister) writeLine(w io.Writer, fi os.FileInfo) (n int, err error) {
 	time := formatTime(fi.ModTime())
 	name := fi.Name()
 
-	return fmt.Fprintf(w, "%10s %d %6s %6s %7d %12s %s\n",
+	return fmt.Sprintf("%10s %d %6s %6s %7d %12s %s",
 		mode, nlinks, user, group, size, time, name)
 }
 
