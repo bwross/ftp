@@ -298,6 +298,22 @@ func (s *fileSession) handlePostAuth(c *Command) error {
 		}
 		s.restart = n
 		return s.Reply(350, "Restart position accepted (%d).", n)
+	case "STAT":
+		if c.Msg == "" {
+			return s.Reply(211, "Looks good to me.")
+		}
+		list, err := s.stat(c.Msg)
+		if isPermission(err) {
+			return s.Reply(550, "Insufficient permissions.")
+		} else if isNotExist(err) {
+			return s.Reply(550, "No such file or directory.")
+		} else if err != nil {
+			return s.Reply(550, "Error retrieving status.")
+		}
+		msg := []string{"Status:"}
+		msg = append(msg, listLines(list)...)
+		msg = append(msg, "End.")
+		return s.Reply(213, strings.Join(msg, "\n"))
 	case "LIST", "NLST":
 		if err := s.list(c); err == errNoDataConn {
 			return s.Reply(425, "Use PORT or PASV first.")
@@ -359,8 +375,8 @@ func (s *fileSession) handlePostAuth(c *Command) error {
 		return s.Reply(214,
 			`The following commands are recognized.
 CDUP CWD  DELE EPRT EPSV FEAT HELP LIST MDTM MKD  MODE NLST NOOP OPTS
-PASS PASV PBSZ PORT PROT PWD  QUIT REST RETR RMD  RNFR RNTO SIZE STOR
-SYST TYPE USER
+PASS PASV PBSZ PORT PROT PWD  QUIT REST RETR RMD  RNFR RNTO SIZE STAT
+STOR SYST TYPE USER
 Help OK.`)
 	case "NOOP":
 		return s.Reply(200, "OK.")
@@ -444,6 +460,28 @@ func (s *fileSession) store(c *Command) error {
 	err = file.Close()
 	s.CloseData()
 	return err
+}
+
+// Handler for STAT.
+func (s *fileSession) stat(p string) ([]os.FileInfo, error) {
+	stat, err := s.Stat(p)
+	if err != nil {
+		return nil, err
+	}
+	if !stat.IsDir() {
+		return []os.FileInfo{stat}, nil
+	}
+	file, err := s.Open(p)
+	if err != nil {
+		return nil, err
+	}
+	list, err := file.Readdir(0)
+	if err != nil {
+		file.Close()
+		return nil, err
+	}
+	file.Close()
+	return list, nil
 }
 
 // Handler for LIST and NLST.
