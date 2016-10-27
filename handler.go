@@ -247,7 +247,7 @@ func (s *fileSession) handlePostAuth(c *Command) error {
 		hp := s.Data.HostPort()
 		return s.Reply(227, "Entering Passive Mode (%s).", hp)
 	case "EPSV":
-		if c.Msg == "ALL" {
+		if msg := strings.ToUpper(c.Msg); msg == "ALL" {
 			s.epsvOnly = true
 			return s.Reply(200, "EPSV ALL ok.")
 		}
@@ -367,7 +367,7 @@ func (s *fileSession) handlePostAuth(c *Command) error {
 		}
 		return s.Reply(200, "Protection level changed.")
 	case "OPTS":
-		if c.Msg == "UTF8 ON" {
+		if msg := strings.ToUpper(c.Msg); msg == "UTF8 ON" {
 			return s.Reply(200, "Always in UTF8 mode.")
 		}
 		return s.Reply(501, "Option not understood.")
